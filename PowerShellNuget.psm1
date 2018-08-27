@@ -1,3 +1,7 @@
+function Get-PowerShellNugetPackageCachePath {
+    "$Home\.nuget\packages"
+}
+
 function Get-PowerShellNugetPackage {
     param (
         $Name,
@@ -16,10 +20,29 @@ function Get-PowerShellNugetPackage {
     Where-Object "@Type" -eq "PackageBaseAddress/3.0.0" |
     Select-Object -First 1 -ExpandProperty "@ID"
 
-    $Lower_Version = Invoke-RestMethod -Method Get -Uri "$PackageConentService$Name/index.json" |
-    Select-Object -ExpandProperty Versions |
-    Sort-Object -Descending |
-    Select-Object -First 1
+    $Lower_Versions = Invoke-RestMethod -Method Get -Uri "$PackageConentService$Name/index.json" |
+    Select-Object -ExpandProperty Versions
     
-    Invoke-RestMethod -Method Get -Uri $PackageConentService$Lower_ID/$Lower_Version/$Lower_ID.$Lower_Version.nupkg -OutFile 
+    $Lower_Version = [system.version[]]($Lower_Versions) |
+    Sort-Object -Descending |
+    Select-Object -First 1 |
+    ForEach-Object { $_.ToString() }
+
+    $NugetPackageCachePath = Get-PowerShellNugetPackageCachePath
+    $PackageCachePath = "$NugetPackageCachePath\$Lower_ID\$Lower_Version"
+    
+    if (-not (Test-Path -Path $PackageCachePath)) {
+        Invoke-RestMethod -Method Get -Uri $PackageConentService$Lower_ID/$Lower_Version/$Lower_ID.$Lower_Version.nupkg -OutFile "$Env:TMP\$Lower_ID.$Lower_Version.nupkg"
+        Get-Item -Path "$Env:TMP\$Lower_ID.$Lower_Version.nupkg" |
+        Rename-Item -NewName "$Lower_ID.$Lower_Version.zip"
+        Expand-Archive -Path $Env:TMP\$Lower_ID.$Lower_Version.zip -DestinationPath $PackageCachePath
+        Remove-Item -Force -Recurse -LiteralPath $PackageCachePath\_rels -ErrorAction SilentlyContinue
+        Remove-Item -Force -Recurse -LiteralPath $PackageCachePath\package -ErrorAction SilentlyContinue
+        Remove-Item -Force -LiteralPath "$PackageCachePath\[Content_Types].xml"
+        Move-Item -Path "$Env:TMP\$Lower_ID.$Lower_Version.zip" -Destination $PackageCachePath\$Lower_ID.$Lower_Version.nupkg
+    }
+
+    Copy-Item -LiteralPath $PackageCachePath\ -Destination $Path -Recurse -PassThru | 
+    Select-Object -First 1 -Wait |
+    Rename-Item -NewName $Lower_ID
 }
