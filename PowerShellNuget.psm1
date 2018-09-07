@@ -1,3 +1,22 @@
+function Install-PowerShellNugetPackage {
+    param (
+        $Name,
+        $Destination,
+        $RequiredVersion,
+        [Switch]$SkipDependencies
+    )
+    begin {
+        Register-PackageSource -Location https://www.nuget.org/api/v2 -name TemporaryNuget.org -Trusted -ProviderName NuGet | Out-Null
+    } 
+    process {            
+        Install-Package -Source TemporaryNuget.org @PSBoundParameters | Out-Null
+    }
+    end {
+        UnRegister-PackageSource -Source TemporaryNuget.org | Out-Null
+    }
+}
+
+
 function Get-PowerShellNugetPackageCachePath {
     "$Home\.nuget\packages"
 }
